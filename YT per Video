@@ -1,0 +1,58 @@
+import pandas as pd
+import os
+from googleapiclient.discovery import build
+from google.colab import files
+
+def video_comments(video_id, api_key):
+    replies = []
+    youtube = build('youtube', 'v3', developerKey=api_key)
+
+    video_response = youtube.commentThreads().list(part='snippet,replies', videoId=video_id).execute()
+
+    while video_response:
+        for item in video_response['items']:
+            published = item['snippet']['topLevelComment']['snippet']['publishedAt']
+            comment = item['snippet']['topLevelComment']['snippet']['textDisplay']
+            likeCount = item['snippet']['topLevelComment']['snippet']['likeCount']
+            replies.append([published, comment, likeCount])
+
+            replycount = item['snippet']['totalReplyCount']
+            if replycount > 0:
+                for reply in item['replies']['comments']:
+                    published = reply['snippet']['publishedAt']
+                    repl = reply['snippet']['textDisplay']
+                    likeCount = reply['snippet']['likeCount']
+                    replies.append([published, repl, likeCount])
+
+        if 'nextPageToken' in video_response:
+            video_response = youtube.commentThreads().list(
+                part='snippet,replies',
+                videoId=video_id,
+                pageToken=video_response['nextPageToken']
+            ).execute()
+        else:
+            break
+
+    return replies
+
+def save_comments(comments):
+    df = pd.DataFrame(comments, columns=['Published', 'Comment', 'Like Count'])
+
+    max_index = 0
+    for filename in os.listdir('.'):
+        if filename.startswith('comments') and filename.endswith('.csv'):
+            file_index = filename[8:-4]
+            if file_index.isdigit():
+                max_index = max(max_index, int(file_index))
+
+    new_filename = f'comments{max_index + 1}.csv'
+    df.to_csv(new_filename, index=False)
+    print(f'File saved as {new_filename}')
+    return new_filename
+
+# Example usage
+api_key = 'AIzaSyAoEOVgTdXDYMfZIvYWFE-c8rXkspXtSTY'
+video_id = 'PQ6XfrXrqBY'
+comments = video_comments(video_id, api_key)
+filename = save_comments(comments)
+files.download(filename)
